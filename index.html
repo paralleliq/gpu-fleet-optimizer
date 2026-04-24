@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPU Fleet Cost Optimizer — Paralleliq</title>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-KSJPQGBGST"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-KSJPQGBGST');
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #7B35D4;
+      --blue:   #4A6CF7;
+      --cyan:   #00C4C4;
+      --bg:     #0a0a1a;
+      --card:   #111128;
+      --card2:  #16163a;
+      --text:   #e8eaf6;
+      --muted:  #8b8fad;
+      --border: #1e2048;
+      --radius: 12px;
+      --green:  #4ade80;
+      --yellow: #fbbf24;
+      --red:    #f87171;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header img { height: 52px; margin-bottom: 24px; }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    header p {
+      font-size: 1.05rem;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 40px;
+      width: 100%;
+      max-width: 760px;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.4);
+    }
+
+    /* ── Provider row ── */
+    .provider-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 28px;
+      align-items: flex-end;
+    }
+
+    .provider-row .field { flex: 1; }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select {
+      padding: 11px 36px 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.97rem;
+      color: var(--text);
+      background: var(--card2);
+      transition: border-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--blue);
+    }
+
+    .select-wrap { position: relative; }
+
+    .select-wrap::after {
+      content: "▾";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+      font-size: 0.85rem;
+    }
+
+    /* ── Fleet table ── */
+    .fleet-header {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1.2fr 1.2fr 40px;
+      gap: 10px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+
+    .fleet-header span {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .fleet-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+
+    .fleet-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1.2fr 1.2fr 40px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .fleet-row input {
+      padding: 10px 14px;
+    }
+
+    .fleet-row input[type="number"] {
+      padding: 10px 14px;
+    }
+
+    .util-wrap { position: relative; }
+
+    .util-wrap input { padding-right: 28px; }
+
+    .util-wrap::after {
+      content: "%";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+
+    .remove-btn {
+      background: none;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 1rem;
+      padding: 0;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .remove-btn:hover { border-color: var(--red); color: var(--red); }
+
+    .add-row-btn {
+      background: transparent;
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 10px;
+      width: 100%;
+      margin-bottom: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-row-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ── Calculate button ── */
+    .calc-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(90deg, var(--purple), var(--blue), var(--cyan));
+      color: #fff;
+      letter-spacing: 0.02em;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .calc-btn:hover { opacity: 0.92; }
+    .calc-btn:active { transform: scale(0.99); }
+
+    /* ── Results ── */
+    #results { margin-top: 32px; display: none; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 28px;
+      opacity: 0.5;
+    }
+
+    .results-label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    .waste-amount {
+      font-size: 2.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, var(--purple), var(--blue), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+
+    .waste-sub {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .summary-item {
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 12px;
+      text-align: center;
+    }
+
+    .summary-item .si-value {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .summary-item .si-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+
+    .si-value.green { color: var(--green); }
+    .si-value.yellow { color: var(--yellow); }
+    .si-value.red { color: var(--red); }
+
+    /* ── Per-row breakdown ── */
+    .breakdown-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+    }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 28px;
+      font-size: 0.88rem;
+    }
+
+    .breakdown-table th {
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .breakdown-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(30,32,72,0.5);
+      vertical-align: middle;
+    }
+
+    .breakdown-table tr:last-child td { border-bottom: none; }
+
+    .waste-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .waste-badge.high   { background: rgba(248,113,113,0.15); color: var(--red); }
+    .waste-badge.medium { background: rgba(251,191,36,0.15);  color: var(--yellow); }
+    .waste-badge.low    { background: rgba(74,222,128,0.15);  color: var(--green); }
+    .waste-badge.ok     { background: rgba(74,222,128,0.10);  color: var(--green); }
+
+    .action-text {
+      font-size: 0.8rem;
+      color: var(--cyan);
+      line-height: 1.4;
+    }
+
+    /* ── Signal box ── */
+    .signal-box {
+      background: linear-gradient(135deg, rgba(123,53,212,0.12), rgba(0,196,196,0.08));
+      border: 1px solid rgba(74,108,247,0.25);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .signal-box strong { color: var(--cyan); }
+
+    /* ── Share ── */
+    .share-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .share-btn {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      width: auto;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .share-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .share-btn.copied { border-color: var(--green); color: var(--green); }
+
+    /* ── Lead capture ── */
+    .lead-section {
+      background: linear-gradient(135deg, rgba(74,108,247,0.10), rgba(0,196,196,0.06));
+      border: 1px solid rgba(74,108,247,0.3);
+      border-radius: 8px;
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+
+    .lead-section p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .lead-section p strong { color: var(--text); }
+
+    .lead-input-row { display: flex; gap: 8px; }
+
+    .lead-input-row input {
+      padding: 10px 14px;
+      flex: 1;
+      font-size: 0.9rem;
+    }
+
+    .lead-submit-btn {
+      width: auto;
+      padding: 10px 18px;
+      font-size: 0.88rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(90deg, var(--purple), var(--blue));
+      color: #fff;
+      transition: opacity 0.2s;
+    }
+
+    .lead-submit-btn:hover { opacity: 0.88; }
+
+    .lead-success { font-size: 0.88rem; color: var(--green); margin-top: 10px; display: none; }
+    .lead-error   { font-size: 0.88rem; color: var(--red);   margin-top: 10px; display: none; }
+
+    .caveat {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 20px;
+      padding: 10px 14px;
+      border-left: 2px solid var(--border);
+    }
+
+    footer {
+      margin-top: 48px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    footer a { color: var(--blue); text-decoration: none; }
+
+    @media (max-width: 600px) {
+      .card { padding: 24px 16px; }
+      .fleet-header { display: none; }
+      .fleet-row { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 8px; padding: 12px; background: var(--card2); border-radius: 8px; border: 1px solid var(--border); }
+      .fleet-row .select-wrap { grid-column: 1 / -1; }
+      .fleet-row .remove-btn { grid-column: 2; justify-self: end; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .provider-row { flex-direction: column; }
+      .lead-input-row { flex-direction: column; }
+      .lead-submit-btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <img src="logo.png" alt="Paralleliq" />
+    <h1>GPU Fleet Cost Optimizer</h1>
+    <p>Enter your fleet composition and actual utilization. See how much you're overspending — and exactly where.</p>
+  </header>
+
+  <div class="card">
+
+    <!-- Provider -->
+    <div class="provider-row">
+      <div class="field">
+        <label>Cloud Provider</label>
+        <div class="select-wrap">
+          <select id="provider">
+            <option value="gcp" selected>Google Cloud (GCP)</option>
+            <option value="aws">Amazon Web Services (AWS)</option>
+            <option value="azure">Microsoft Azure</option>
+            <option value="coreweave">CoreWeave</option>
+            <option value="lambda">Lambda Labs</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fleet table header -->
+    <div class="fleet-header">
+      <span>GPU Type</span>
+      <span>Count</span>
+      <span>Avg Utilization</span>
+      <span>Model Size</span>
+      <span></span>
+    </div>
+
+    <!-- Fleet rows -->
+    <div class="fleet-rows" id="fleetRows"></div>
+
+    <button class="add-row-btn" onclick="addRow()">+ Add GPU Type</button>
+
+    <button class="calc-btn" onclick="calculate()">Calculate Fleet Waste</button>
+
+    <!-- Results -->
+    <div id="results">
+      <hr class="divider" />
+
+      <div class="results-label">Recoverable Annual Spend</div>
+      <div class="waste-amount" id="totalWaste">—</div>
+      <div class="waste-sub" id="wasteSub">per year across your fleet</div>
+
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="si-value" id="sumCurrentCost">—</div>
+          <div class="si-label">Current Annual Cost</div>
+        </div>
+        <div class="summary-item">
+          <div class="si-value green" id="sumOptimizedCost">—</div>
+          <div class="si-label">Optimized Annual Cost</div>
+        </div>
+        <div class="summary-item">
+          <div class="si-value yellow" id="sumWastePct">—</div>
+          <div class="si-label">of spend recoverable</div>
+        </div>
+      </div>
+
+      <!-- Per-row breakdown -->
+      <div class="breakdown-title">Breakdown by GPU Type</div>
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>GPU</th>
+            <th>Count</th>
+            <th>Utilization</th>
+            <th>Annual Cost</th>
+            <th>Waste Level</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownBody"></tbody>
+      </table>
+
+      <div class="signal-box" id="signalBox"></div>
+
+      <!-- Share -->
+      <div class="share-row">
+        <button class="share-btn" id="shareBtn" onclick="copyShareLink()">🔗 Copy shareable link</button>
+      </div>
+
+      <!-- Lead capture -->
+      <div class="lead-section">
+        <p><strong>Want the full optimization report?</strong><br/>Enter your email and we'll send a detailed breakdown with rightsizing recommendations for your fleet.</p>
+        <div class="lead-input-row">
+          <input type="email" id="leadEmail" placeholder="you@company.com" />
+          <button class="lead-submit-btn" onclick="submitLead()">Send Report</button>
+        </div>
+        <div class="lead-success" id="leadSuccess">✓ Sent! Check your inbox.</div>
+        <div class="lead-error"   id="leadError">Something went wrong — email us at info@paralleliq.ai</div>
+      </div>
+
+      <button class="calc-btn" onclick="window.location.href='https://github.com/paralleliq/piqc'">
+        Get Exact Numbers — Run a Free Scan
+      </button>
+
+      <div class="caveat" style="margin-top:16px;">
+        * Prices are estimates based on on-demand rates and may vary. Check provider pricing pages for current rates.
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>Built by <a href="https://paralleliq.ai" target="_blank">Paralleliq</a> · <a href="mailto:info@paralleliq.ai">info@paralleliq.ai</a></p>
+  </footer>
+
+  <script>
+    // ── Pricing data (on-demand $/hr per GPU) ──────────────────────────────
+    const PRICES = {
+      gcp:       { t4: 0.35, l4: 0.54, a10: 0.90, 'a100-40': 2.21, 'a100-80': 3.06, h100: 3.50, h200: 5.00, mi300x: 4.50 },
+      aws:       { t4: 0.526, l4: 0.805, a10: 1.006, 'a100-40': 3.21, 'a100-80': 4.10, h100: 5.12, h200: 6.50, mi300x: 5.00 },
+      azure:     { t4: 0.53, l4: 0.60, a10: 1.10, 'a100-40': 3.40, 'a100-80': 3.67, h100: 5.80, h200: 7.00, mi300x: 5.20 },
+      coreweave: { t4: 0.28, l4: 0.44, a10: 0.85, 'a100-40': 2.06, 'a100-80': 2.76, h100: 2.95, h200: 4.25, mi300x: 3.80 },
+      lambda:    { t4: 0.30, l4: 0.50, a10: 0.75, 'a100-40': 1.99, 'a100-80': 2.50, h100: 2.49, h200: 3.90, mi300x: 3.50 },
+    };
+
+    const GPU_NAMES = {
+      t4: 'NVIDIA T4 (16GB)', l4: 'NVIDIA L4 (24GB)', a10: 'NVIDIA A10 (48GB)',
+      'a100-40': 'NVIDIA A100 40GB', 'a100-80': 'NVIDIA A100 80GB',
+      h100: 'NVIDIA H100 (80GB)', h200: 'NVIDIA H200 (141GB)', mi300x: 'AMD MI300X (192GB)',
+    };
+
+    // GPU tier levels (higher = more powerful)
+    const GPU_TIER = { t4: 1, l4: 2, a10: 3, 'a100-40': 4, 'a100-80': 5, h100: 6, h200: 7, mi300x: 7 };
+
+    // Minimum recommended tier per model size
+    const MODEL_MIN_TIER = {
+      '7b': 1, '13b': 2, '30b': 3, '70b': 4, '180b': 6, 'mixed': 3, 'training': 5,
+    };
+
+    const MODEL_LABELS = {
+      '7b': '7B–13B', '13b': '13B', '30b': '30B–40B', '70b': '70B+',
+      '180b': '180B+', 'mixed': 'Mixed', 'training': 'Training',
+    };
+
+    let rowCount = 0;
+
+    function gpuOptions(selected) {
+      const gpus = [
+        ['t4','NVIDIA T4 (16GB)'], ['l4','NVIDIA L4 (24GB)'], ['a10','NVIDIA A10 (48GB)'],
+        ['a100-40','NVIDIA A100 40GB'], ['a100-80','NVIDIA A100 80GB'],
+        ['h100','NVIDIA H100 (80GB)'], ['h200','NVIDIA H200 (141GB)'], ['mi300x','AMD MI300X (192GB)'],
+      ];
+      return gpus.map(([v, l]) => `<option value="${v}"${v===selected?' selected':''}>${l}</option>`).join('');
+    }
+
+    function modelOptions(selected) {
+      const models = [
+        ['7b','7B – 13B (inference)'], ['30b','30B – 40B'], ['70b','70B+'],
+        ['180b','180B+ / large ensemble'], ['mixed','Mixed workloads'], ['training','Model training'],
+      ];
+      return models.map(([v, l]) => `<option value="${v}"${v===selected?' selected':''}>${l}</option>`).join('');
+    }
+
+    function addRow(gpuType='l4', count=10, util=35, model='mixed') {
+      rowCount++;
+      const id = rowCount;
+      const row = document.createElement('div');
+      row.className = 'fleet-row';
+      row.id = `row-${id}`;
+      row.innerHTML = `
+        <div class="select-wrap">
+          <select id="gpu-${id}" oninput="onInput()">${gpuOptions(gpuType)}</select>
+        </div>
+        <input type="number" id="count-${id}" value="${count}" min="1" max="10000" oninput="onInput()" />
+        <div class="util-wrap">
+          <input type="number" id="util-${id}" value="${util}" min="1" max="100" oninput="onInput()" />
+        </div>
+        <div class="select-wrap">
+          <select id="model-${id}" oninput="onInput()">${modelOptions(model)}</select>
+        </div>
+        <button class="remove-btn" onclick="removeRow(${id})" title="Remove">✕</button>
+      `;
+      document.getElementById('fleetRows').appendChild(row);
+    }
+
+    function removeRow(id) {
+      const el = document.getElementById(`row-${id}`);
+      if (el) el.remove();
+      onInput();
+    }
+
+    function onInput() {
+      // auto-recalculate if results are visible
+      if (document.getElementById('results').style.display !== 'none') calculate();
+    }
+
+    function getRows() {
+      const rows = [];
+      document.querySelectorAll('.fleet-row').forEach(row => {
+        const id = row.id.replace('row-', '');
+        const gpuEl    = document.getElementById(`gpu-${id}`);
+        const countEl  = document.getElementById(`count-${id}`);
+        const utilEl   = document.getElementById(`util-${id}`);
+        const modelEl  = document.getElementById(`model-${id}`);
+        if (!gpuEl) return;
+        rows.push({
+          gpu:   gpuEl.value,
+          count: parseInt(countEl.value) || 1,
+          util:  parseFloat(utilEl.value) || 0,
+          model: modelEl.value,
+        });
+      });
+      return rows;
+    }
+
+    function wasteLevel(util, gpuTier, modelMinTier) {
+      const overTiered = gpuTier > modelMinTier + 1;
+      if (util < 20 || (util < 35 && overTiered)) return 'high';
+      if (util < 40 || overTiered) return 'medium';
+      if (util < 55) return 'low';
+      return 'ok';
+    }
+
+    function wasteRate(level) {
+      return { high: 0.55, medium: 0.30, low: 0.12, ok: 0.03 }[level];
+    }
+
+    function recommendation(gpu, count, util, model) {
+      const tier = GPU_TIER[gpu] || 1;
+      const minTier = MODEL_MIN_TIER[model] || 1;
+      const parts = [];
+
+      if (util < 20) {
+        const suggestCount = Math.max(1, Math.round(count * (util / 100) / 0.60));
+        if (suggestCount < count) parts.push(`Scale down to ~${suggestCount} GPUs`);
+      } else if (util < 40) {
+        const suggestCount = Math.max(1, Math.round(count * 0.75));
+        if (suggestCount < count) parts.push(`Consider reducing to ~${suggestCount} GPUs`);
+      }
+
+      if (tier > minTier + 1) {
+        const gpuKeys = Object.keys(GPU_TIER);
+        const targetGpu = gpuKeys.find(k => GPU_TIER[k] === minTier + 1) || gpuKeys.find(k => GPU_TIER[k] === minTier);
+        if (targetGpu && targetGpu !== gpu) {
+          parts.push(`Downgrade to ${GPU_NAMES[targetGpu]}`);
+        }
+      }
+
+      if (parts.length === 0) return util >= 70 ? 'Well utilized — consider adding capacity' : 'Monitor — utilization is acceptable';
+      return parts.join(' · ');
+    }
+
+    function fmt(n) {
+      if (n >= 1e6) return `$${(n/1e6).toFixed(2)}M`;
+      if (n >= 1e3) return `$${Math.round(n).toLocaleString()}`;
+      return `$${Math.round(n)}`;
+    }
+
+    function calculate() {
+      const provider = document.getElementById('provider').value;
+      const prices   = PRICES[provider];
+      const rows     = getRows();
+
+      if (rows.length === 0) return;
+
+      let totalCurrent = 0;
+      let totalWasteAnnual = 0;
+      const HOURS = 8760;
+
+      const tbodyRows = rows.map(r => {
+        const hourly  = (prices[r.gpu] || 0) * r.count;
+        const annual  = hourly * HOURS;
+        const tier    = GPU_TIER[r.gpu] || 1;
+        const minTier = MODEL_MIN_TIER[r.model] || 1;
+        const level   = wasteLevel(r.util, tier, minTier);
+        const waste   = annual * wasteRate(level);
+        const rec     = recommendation(r.gpu, r.count, r.util, r.model);
+
+        totalCurrent     += annual;
+        totalWasteAnnual += waste;
+
+        const badgeClass = level === 'ok' ? 'ok' : level;
+        const badgeLabel = { high: 'HIGH', medium: 'MEDIUM', low: 'LOW', ok: 'EFFICIENT' }[level];
+
+        return `
+          <tr>
+            <td>${GPU_NAMES[r.gpu]}</td>
+            <td>${r.count}</td>
+            <td style="color:${r.util < 30 ? 'var(--red)' : r.util < 55 ? 'var(--yellow)' : 'var(--green)'}">${r.util}%</td>
+            <td>${fmt(annual)}/yr</td>
+            <td><span class="waste-badge ${badgeClass}">${badgeLabel}</span></td>
+            <td><span class="action-text">${rec}</span></td>
+          </tr>
+        `;
+      });
+
+      const wastePct       = totalCurrent > 0 ? (totalWasteAnnual / totalCurrent * 100) : 0;
+      const optimizedCost  = totalCurrent - totalWasteAnnual;
+
+      document.getElementById('totalWaste').textContent    = fmt(totalWasteAnnual);
+      document.getElementById('wasteSub').textContent      = `per year recoverable across ${rows.reduce((a,r) => a+r.count,0)} GPUs`;
+      document.getElementById('sumCurrentCost').textContent  = fmt(totalCurrent) + '/yr';
+      document.getElementById('sumOptimizedCost').textContent = fmt(optimizedCost) + '/yr';
+      document.getElementById('sumWastePct').textContent   = wastePct.toFixed(0) + '%';
+
+      // Color the waste % badge
+      const wPctEl = document.getElementById('sumWastePct');
+      wPctEl.className = 'si-value ' + (wastePct >= 40 ? 'red' : wastePct >= 20 ? 'yellow' : 'green');
+
+      document.getElementById('breakdownBody').innerHTML = tbodyRows.join('');
+
+      // Signal box
+      const highCount = rows.filter(r => {
+        const t = GPU_TIER[r.gpu] || 1;
+        const m = MODEL_MIN_TIER[r.model] || 1;
+        return wasteLevel(r.util, t, m) === 'high';
+      }).length;
+
+      let signal = '';
+      if (wastePct >= 40) {
+        signal = `<strong>Critical waste detected.</strong> ${wastePct.toFixed(0)}% of your GPU spend — ${fmt(totalWasteAnnual)}/yr — is recoverable through rightsizing. Paralleliq can automate this continuously.`;
+      } else if (wastePct >= 20) {
+        signal = `<strong>${wastePct.toFixed(0)}% waste identified.</strong> ${fmt(totalWasteAnnual)}/yr in recoverable spend. ${highCount > 0 ? `${highCount} GPU group${highCount>1?'s':''} showing high waste.` : ''} Run a free scan to get exact workload-level numbers.`;
+      } else {
+        signal = `<strong>Your fleet looks relatively efficient.</strong> ${fmt(totalWasteAnnual)}/yr in potential savings identified. Run a free scan to verify at the workload level.`;
+      }
+      document.getElementById('signalBox').innerHTML = signal;
+
+      document.getElementById('results').style.display = 'block';
+
+      gtag('event', 'fleet_calculate', {
+        gpu_count: rows.reduce((a,r) => a+r.count, 0),
+        annual_cost: Math.round(totalCurrent),
+        waste_pct: Math.round(wastePct),
+        provider,
+      });
+    }
+
+    function copyShareLink() {
+      const rows  = getRows();
+      const prov  = document.getElementById('provider').value;
+      const params = new URLSearchParams({ provider: prov });
+      rows.forEach((r, i) => {
+        params.set(`g${i}`, r.gpu);
+        params.set(`c${i}`, r.count);
+        params.set(`u${i}`, r.util);
+        params.set(`m${i}`, r.model);
+      });
+      params.set('n', rows.length);
+      const url = `${location.origin}${location.pathname}?${params}`;
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById('shareBtn');
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '🔗 Copy shareable link'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+
+    function loadFromUrl() {
+      const p = new URLSearchParams(location.search);
+      if (!p.has('n')) return false;
+      if (p.has('provider')) document.getElementById('provider').value = p.get('provider');
+      const n = parseInt(p.get('n')) || 0;
+      document.getElementById('fleetRows').innerHTML = '';
+      rowCount = 0;
+      for (let i = 0; i < n; i++) {
+        addRow(p.get(`g${i}`) || 'l4', parseInt(p.get(`c${i}`)) || 10, parseFloat(p.get(`u${i}`)) || 35, p.get(`m${i}`) || 'mixed');
+      }
+      calculate();
+      return true;
+    }
+
+    async function submitLead() {
+      const email = document.getElementById('leadEmail').value.trim();
+      if (!email || !email.includes('@')) { return; }
+
+      const rows = getRows();
+      const provider = document.getElementById('provider').value;
+      const totalGpus = rows.reduce((a,r) => a+r.count, 0);
+
+      const payload = {
+        email,
+        calculator: 'GPU Fleet Cost Optimizer',
+        provider,
+        total_gpus: totalGpus,
+        row_count: rows.length,
+      };
+
+      try {
+        const resp = await fetch('https://formspree.io/f/xyklnbgy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (resp.ok) {
+          document.getElementById('leadSuccess').style.display = 'block';
+          document.getElementById('leadError').style.display   = 'none';
+          gtag('event', 'lead_capture', { email_domain: email.split('@')[1], calculator: 'fleet' });
+        } else {
+          document.getElementById('leadError').style.display = 'block';
+        }
+      } catch {
+        document.getElementById('leadError').style.display = 'block';
+      }
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    if (!loadFromUrl()) {
+      addRow('a100-80', 8, 22, '70b');
+      addRow('l4', 20, 38, 'mixed');
+      addRow('t4', 12, 18, '7b');
+    }
+  </script>
+
+</body>
+</html>
