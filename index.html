@@ -856,6 +856,8 @@
       const totalGpus = rows.reduce((a,r) => a+r.count, 0);
 
       const payload = {
+        access_key: '169d21e8-3750-4079-97ae-8de5198250d6',
+        subject: 'Lead: GPU Fleet Cost Optimizer',
         email,
         calculator: 'GPU Fleet Cost Optimizer',
         provider,
@@ -864,7 +866,7 @@
       };
 
       try {
-        const resp = await fetch('https://formspree.io/f/xyklnbgy', {
+        const resp = await fetch('https://api.web3forms.com/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(payload),
